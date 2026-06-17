@@ -229,10 +229,11 @@ export default function StudyRoom() {
     }
   };
   const { cooldownRemaining, startCooldown } = useAICooldown(user);
-  const { deckId } = useParams();
+  const { deckId: rawDeckId } = useParams();
+  const deckId = rawDeckId ? decodeURIComponent(rawDeckId) : "";
   const [isLoading, setIsLoading] = useState(true);
   const [rawDeck, setRawDeck] = useState<any>(() =>
-    store.getDeck(deckId || ""),
+    store.getDeck(deckId),
   );
   const [personalCardStates, setPersonalCardStates] = useState<any[]>([]);
   const [accessDenied, setAccessDenied] = useState(false);
@@ -419,51 +420,74 @@ export default function StudyRoom() {
       return;
     }
 
-    if (unsubDeckRef.current) unsubDeckRef.current();
-    try {
-      const unsub = onSnapshot(doc(db, "sets", deckId), (docSnap) => {
-        if (docSnap.exists()) {
-          const fetchedData = docSnap.data();
-          setRawDeck(fetchedData);
-          store.setTempDeck(fetchedData);
-        } else {
-          // Fallback to IndexedDB if document does not exist or we are offline
-          import("../utils/offlineDb").then(({ getOfflineDeck }) => {
-            getOfflineDeck(deckId).then((offlineDeck) => {
-              if (offlineDeck) {
-                setRawDeck(offlineDeck);
-                store.setTempDeck(offlineDeck);
-                setIsOfflineSaved(true);
+    let unsubAuth: any = null;
+
+    const setupAuthAndListen = () => {
+       unsubAuth = import("firebase/auth").then(({ onAuthStateChanged }) => {
+          return onAuthStateChanged(auth, (firebaseUser) => {
+             if (!firebaseUser && navigator.onLine) {
+                 // Wait for auth to resolve
+                 return;
+             }
+             
+             if (unsubDeckRef.current) {
+                 unsubDeckRef.current();
+             }
+             
+             try {
+                const unsub = onSnapshot(doc(db, "sets", deckId), (docSnap) => {
+                  if (docSnap.exists()) {
+                    const fetchedData = docSnap.data();
+                    if (fetchedData && !fetchedData.id) fetchedData.id = docSnap.id;
+                    setRawDeck(fetchedData);
+                    store.setTempDeck(fetchedData);
+                  } else {
+                    // Fallback to IndexedDB if document does not exist
+                    import("../utils/offlineDb").then(({ getOfflineDeck }) => {
+                      getOfflineDeck(deckId).then((offlineDeck) => {
+                        if (offlineDeck) {
+                          setRawDeck(offlineDeck);
+                          store.setTempDeck(offlineDeck);
+                          setIsOfflineSaved(true);
+                        }
+                      });
+                    });
+                  }
+                  setIsLoading(false);
+                }, (err) => {
+                  console.error("onSnapshot failed, falling back to IndexedDB database:", err);
+                  import("../utils/offlineDb").then(({ getOfflineDeck }) => {
+                    getOfflineDeck(deckId).then((offlineDeck) => {
+                      if (offlineDeck) {
+                        setRawDeck(offlineDeck);
+                        store.setTempDeck(offlineDeck);
+                        setIsOfflineSaved(true);
+                      }
+                      setIsLoading(false);
+                    });
+                  });
+                });
+                unsubDeckRef.current = unsub;
+                FirebaseListenerManager.add(`StudyRoom_deck_${deckId}`, unsub);
+              } catch (e) {
+                console.error("Failed to sync room deck in real-time:", e);
+                setIsLoading(false);
               }
-            });
           });
-        }
-        setIsLoading(false);
-      }, (err) => {
-        console.error("onSnapshot failed, falling back to IndexedDB database:", err);
-        import("../utils/offlineDb").then(({ getOfflineDeck }) => {
-          getOfflineDeck(deckId).then((offlineDeck) => {
-            if (offlineDeck) {
-              setRawDeck(offlineDeck);
-              store.setTempDeck(offlineDeck);
-              setIsOfflineSaved(true);
-            }
-            setIsLoading(false);
-          });
-        });
-      });
-      unsubDeckRef.current = unsub;
-      FirebaseListenerManager.add(`StudyRoom_deck_${deckId}`, unsub);
-    } catch (e) {
-      console.error("Failed to sync room deck in real-time:", e);
-      setIsLoading(false);
-    }
+       });
+    };
+    
+    setupAuthAndListen();
+
     return () => {
       if (unsubDeckRef.current) {
         unsubDeckRef.current();
         unsubDeckRef.current = null;
       }
       FirebaseListenerManager.remove(`StudyRoom_deck_${deckId}`);
+      if (unsubAuth) {
+         unsubAuth.then((unsub: any) => { if (unsub) unsub(); });
+      }
     };
   }, [deckId, user?.id]);
 
@@ -477,32 +501,44 @@ export default function StudyRoom() {
   const unsubCardStatesRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (!user) return;
-    if (unsubCardStatesRef.current) unsubCardStatesRef.current();
-    try {
-      const unsub = onSnapshot(
-        collection(db, "users", user.id, "cardsState"),
-        (snapshot) => {
-          const states: any[] = [];
-          snapshot.forEach((docSnap) => {
-            states.push({ id: docSnap.id, ...docSnap.data() });
-          });
-          setPersonalCardStates(states);
-        },
-        (err) => {
-          console.error("StudyRoom cardsState sync error:", err);
-        },
-      );
-      unsubCardStatesRef.current = unsub;
-      FirebaseListenerManager.add(`StudyRoom_cardsState_${user.id}`, unsub);
-    } catch (e) {
-      console.error("Failed to sync study room card states:", e);
-    }
+    let unsubAuthStates: any = null;
+    
+    unsubAuthStates = import("firebase/auth").then(({ onAuthStateChanged }) => {
+      return onAuthStateChanged(auth, (firebaseUser) => {
+         if (!firebaseUser && navigator.onLine) return; // Wait until authenticated
+         
+         if (unsubCardStatesRef.current) unsubCardStatesRef.current();
+         try {
+            const unsub = onSnapshot(
+              collection(db, "users", user.id, "cardsState"),
+              (snapshot) => {
+                const states: any[] = [];
+                snapshot.forEach((docSnap) => {
+                  states.push({ id: docSnap.id, ...docSnap.data() });
+                });
+                setPersonalCardStates(states);
+              },
+              (err) => {
+                console.error("StudyRoom cardsState sync error:", err);
+              },
+            );
+            unsubCardStatesRef.current = unsub;
+            FirebaseListenerManager.add(`StudyRoom_cardsState_${user.id}`, unsub);
+          } catch (e) {
+            console.error("Failed to sync study room card states:", e);
+          }
+      });
+    });
+
     return () => {
       if (unsubCardStatesRef.current) {
         unsubCardStatesRef.current();
         unsubCardStatesRef.current = null;
       }
       FirebaseListenerManager.remove(`StudyRoom_cardsState_${user?.id}`);
+      if (unsubAuthStates) {
+         unsubAuthStates.then((unsub: any) => { if (unsub) unsub(); });
+      }
     };
   }, [user?.id]);
 
@@ -2467,7 +2503,7 @@ export default function StudyRoom() {
   if (!deck)
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <div>Không tìm thấy bộ thẻ (Deck not found).</div>
+        <div>Không tìm thấy bộ thẻ (ID: {deckId || 'undefined'}).</div>
         <button
           onClick={handleBack}
           className="px-6 py-2 rounded-lg bg-orange-500 text-black font-bold hover:bg-orange-600 transition border-none cursor-pointer"

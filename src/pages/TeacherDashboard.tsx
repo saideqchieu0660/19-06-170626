@@ -421,6 +421,7 @@ export default function TeacherDashboard() {
                 mastery: (typeof c.mastery === 'number' && !isNaN(c.mastery)) ? c.mastery : 0
               }));
             }
+            if (!data.id) data.id = docSnap.id;
             list.push(data);
           });
           if (!isMounted) return;

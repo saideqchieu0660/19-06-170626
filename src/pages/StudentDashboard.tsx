@@ -651,7 +651,7 @@ export default function StudentDashboard() {
           const isUserTeacher = user.role === "teacher" || user.role === "Admin" || user.role === "admin";
 
           if (isSystem || isCreatedBySelf || isUserTeacher || isCreatedByTeacher) {
-            list.push(data as Deck);
+            list.push({ ...data, id: data.id || docSnap.id } as Deck);
           }
         });
         setRawDecks(list);
