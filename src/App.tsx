@@ -26,7 +26,6 @@ import { AudioVisualizer } from "./components/AudioVisualizer";
 import { ParticleBackground } from "./components/ParticleBackground";
 import { CustomCursor } from "./components/CustomCursor";
 import { getLevelInfo } from "./utils/xp";
-import { AdminToolsDropdown } from "./components/AdminToolsDropdown";
 import { GlobalErrorReporter } from "./components/GlobalErrorReporter";
 import { auth, FirebaseListenerManager } from "./lib/firebase";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
@@ -1119,7 +1118,6 @@ function Layout({ children }: { children: React.ReactNode }) {
         )}
       </AnimatePresence>
 
-      {isUserAdminOrTeacher && isAdminMode && <AdminToolsDropdown />}
       <GlobalErrorToast />
       <AppUpdateNotification />
       <ForceRefreshButton />

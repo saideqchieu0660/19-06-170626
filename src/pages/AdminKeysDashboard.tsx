@@ -7,6 +7,7 @@ import { apiManager } from "../lib/ApiQueueManager";
 import { NetworkHealthMonitor, NetworkHealthLog } from "../lib/NetworkHealthMonitor";
 import { apiProviderConfig, updateApiProviderConfig, keyRegistry } from "../utils/apiClient";
 import { AIPromptsEditorWidget } from "../components/AIPromptsEditorWidget";
+import { AdminToolsDropdown } from "../components/AdminToolsDropdown";
 import { useSystemConfig } from "../hooks/useSystemConfig";
 
 class MonitorErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean}> {
@@ -1736,6 +1737,8 @@ export default function AdminKeysDashboard() {
       <MonitorErrorBoundary>
         <ServiceMonitor adminKey={adminKey} />
       </MonitorErrorBoundary>
+      
+      <AdminToolsDropdown />
     </div>
   );
 }
