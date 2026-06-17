@@ -12,6 +12,10 @@
         const isCss = target && target.tagName === 'LINK' && target.rel === 'stylesheet';
         
         if (isScript || isCss || (e.message && (e.message.includes('dynamically imported') || e.message.includes('fetch dynamically imported')))) {
+          if (!navigator.onLine) {
+            console.warn("[System] Offline detected. Ignoring chunk load error to preserve PWA cache.");
+            return;
+          }
           console.warn("[System] Detected stale static assets. Purging Service Worker & cache...");
           if ('serviceWorker' in navigator) {
             navigator.serviceWorker.getRegistrations().then(function(registrations) {

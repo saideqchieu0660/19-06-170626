@@ -1,5 +1,5 @@
-const CACHE_NAME = 'henosis-root-v3';
-const DYNAMIC_CACHE = 'henosis-dynamic-v3';
+const CACHE_NAME = 'henosis-root-v4';
+const DYNAMIC_CACHE = 'henosis-dynamic-v4';
 
 // 2. ASSET CACHING & VITE HASHES: 
 // Baseline assets to cache immediately upon install
@@ -91,6 +91,10 @@ self.addEventListener('fetch', (event) => {
           // Attempt network fetch first to ensure they get the freshest deploy when online
           const networkResponse = await fetch(event.request);
           
+          if (!networkResponse || (!networkResponse.ok && networkResponse.type !== 'opaque')) {
+            throw new Error(`Server returned non-OK status: ${networkResponse?.status}`);
+          }
+          
           // Optional: Update the cached index.html so it stays fresh
           if (networkResponse && networkResponse.status === 200) {
             const cache = await caches.open(CACHE_NAME);
@@ -108,7 +112,11 @@ self.addEventListener('fetch', (event) => {
              return cachedResponse;
           }
           // The absolute ultimate fallback incase index.html mapping was lost
-          return cache.match('/');
+          const ultimateFallback = await cache.match('/');
+          if (ultimateFallback) {
+             return ultimateFallback;
+          }
+          return new Response('Offline App Shell missing', { status: 503, statusText: 'Service Unavailable', headers: { 'Content-Type': 'text/plain' }});
         }
       })()
     );
@@ -136,7 +144,11 @@ self.addEventListener('fetch', (event) => {
         });
 
       // Provide the cached response immediately if it exists, meanwhile revalidate exactly what we need
-      return cachedResponse || await fetchPromise;
+      const finalResponse = cachedResponse || await fetchPromise;
+      if (!finalResponse) {
+        return new Response('Offline and resource not found in cache.', { status: 503, statusText: 'Service Unavailable' });
+      }
+      return finalResponse;
     })()
   );
 });

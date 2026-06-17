@@ -54,6 +54,10 @@ const handleChunkError = (message: string) => {
     message?.includes("Importing a module script failed") ||
     message?.includes("dynamically imported module")
   ) {
+    if (!navigator.onLine) {
+       console.warn("Offline: Cannot load chunk. Not reloading.");
+       return;
+    }
     const lastReloadTime = sessionStorage.getItem("chunk_reload_time");
     const now = Date.now();
     // Only reload once every 10 seconds to prevent infinite loops when network is genuinely down
